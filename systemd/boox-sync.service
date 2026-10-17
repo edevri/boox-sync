@@ -1,0 +1,9 @@
+[Unit]
+Description=Render changed Boox notebooks on Google Drive to PDF
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=%h/.config/boox-sync.env
+ExecStart=/usr/bin/python3 -E %h/.local/share/boox-sync/sync.py --src ${BOOX_SRC} --dst ${BOOX_DST}
