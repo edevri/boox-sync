@@ -2,9 +2,12 @@
 
 Turns the native Boox notebooks that the Notes app syncs to Google Drive into PDFs, also on Google Drive.
 Runs every minute; only notebooks whose content changed since the last run are re-rendered.
-Each PDF's modified time is set to the date in the notebook's name (`20261015 Person` -> 2026-10-15),
-so sorting the Drive folder by "Last modified" puts them in chronological order.
-Notebooks without a date in their name use their creation time.
+Each PDF's modified time is set to when you last wrote in the notebook (the time of its last pen
+stroke, recorded inside the `.note`), on the date in the notebook's name (`20261015 Person` -> 2026-10-15).
+So sorting the Drive folder by "Last modified" puts them in chronological order, and a notebook edited
+on a later day stays on its own day. Notebooks without a date in their name use the full time of the
+last stroke. Upload times are never used, so a Boox re-uploading everything doesn't reorder anything.
+Renaming a notebook replaces its PDF. `~/.cache/boox-sync` is safe to delete: it just costs one full re-render.
 
 ```
 Boox Notes --(native sync)--> Drive: BOOX_SRC/*.note

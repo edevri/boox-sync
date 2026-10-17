@@ -2,7 +2,9 @@
 
 A notebook is a tree (zipped as a .note file, or unpacked as a folder) of:
   note/pb/note_info          protobuf: title, page order (field 20, JSON), page width (22)
-  shape/<page>#<id>#<ts>.zip  zip of protobuf: one message per stroke (field 1)
+  shape/<page>#<id>#<ts>.zip  zip of protobuf: one message per stroke (field 1);
+                             stroke field 2 is when it was drawn (ms). Field 3 looks like a
+                             modified time but the Boox rewrites it in bulk, so it's unreliable
   point/<page>/<page>#<id>#points
                              binary, big-endian: stroke point blocks + index at the end
   note/templateRes/*.svg     page background (lined paper etc.)
@@ -111,3 +113,6 @@ class Note:
                     pen=sh.get(12, [0])[0],
                     points=points.get(sid, [])))
             self.pages.append(strokes)
+        # when the last pen stroke was drawn; the creation time for an empty notebook
+        self.last_stroke_ms = max((sh.get(2, [0])[0] for pid in self.page_ids
+                                   for sh in shapes.get(pid, [])), default=0) or self.created_ms

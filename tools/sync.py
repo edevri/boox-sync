@@ -4,7 +4,9 @@
 
 1. rclone sync SRC -> CACHE/notes   (only changed files are downloaded)
 2. render every notebook whose content hash changed since the last run -> CACHE/pdf,
-   with the PDF's modified time set to the note's date so Drive sorts them chronologically
+   with the PDF's modified time set to when the last pen stroke was drawn, on the date in
+   the notebook's name, so Drive sorts them chronologically. The time comes from the
+   notebook itself, so the state file is only a cache: losing it costs one full re-render
 3. rclone sync CACHE/pdf -> DST     (only changed PDFs are uploaded)
 
 DST is mirrored: PDFs of deleted notebooks are removed there too, so give it its own folder.
@@ -52,18 +54,19 @@ def fingerprint(path):
     return h.hexdigest()
 
 
-def note_time(name, created_ms):
-    """Timestamp for sorting: the YYYYMMDD / YYYY-MM-DD date in the name (at the note's
-    creation time of day, to order notes from the same day), else the creation time."""
-    created = datetime.datetime.fromtimestamp(created_ms / 1000)
+def note_time(name, last_stroke_ms):
+    """Timestamp for sorting: the YYYYMMDD / YYYY-MM-DD date in the name (so the note stays on
+    the day it belongs to, even if edited later) at the time of day of the last pen stroke;
+    without a date in the name, the time of the last pen stroke."""
+    last = datetime.datetime.fromtimestamp(last_stroke_ms / 1000)
     m = re.search(r'(?<!\d)(20\d\d)-?(\d\d)-?(\d\d)(?!\d)', name)
     if m:
         try:
             return datetime.datetime.combine(
-                datetime.date(*map(int, m.groups())), created.time()).timestamp()
+                datetime.date(*map(int, m.groups())), last.time()).timestamp()
         except ValueError:
             pass  # not a real date
-    return created.timestamp()
+    return last.timestamp()
 
 
 def pdf_name(rel, path):
@@ -82,7 +85,7 @@ def convert(notes_dir, pdf_dir, state, force=False):
         seen.add(rel)
         fp = fingerprint(path)
         prev = state.get(rel)
-        if (not force and prev and prev['fp'] == fp and 'mtime' in prev
+        if (not force and prev and prev['fp'] == fp
                 and os.path.exists(os.path.join(pdf_dir, prev['pdf']))):
             continue
         try:
@@ -90,7 +93,7 @@ def convert(notes_dir, pdf_dir, state, force=False):
             out = os.path.join(pdf_dir, pdf)
             os.makedirs(os.path.dirname(out), exist_ok=True)
             note = render(path, out + '.tmp')
-            mtime = note_time(os.path.basename(pdf), note.created_ms)
+            mtime = note_time(os.path.basename(pdf), note.last_stroke_ms)
             os.utime(out + '.tmp', (mtime, mtime))
             os.replace(out + '.tmp', out)
         except Exception:
@@ -99,7 +102,7 @@ def convert(notes_dir, pdf_dir, state, force=False):
             continue
         if prev and prev['pdf'] != pdf:
             remove_pdf(pdf_dir, prev['pdf'])
-        state[rel] = {'fp': fp, 'pdf': pdf, 'mtime': mtime}
+        state[rel] = {'fp': fp, 'pdf': pdf}
         log.info('rendered %s -> %s', rel, pdf)
     for rel in set(state) - seen:
         remove_pdf(pdf_dir, state.pop(rel)['pdf'])
@@ -140,7 +143,7 @@ def main():
     with open(state_file + '.tmp', 'w') as fh:
         json.dump(state, fh, indent=1)
     os.replace(state_file + '.tmp', state_file)
-    rclone('sync', '--checksum', '--exclude', '*.tmp', pdf_dir, args.dst)  # PDF mtimes are fixed note dates; compare content
+    rclone('sync', '--checksum', '--exclude', '*.tmp', pdf_dir, args.dst)  # PDF mtimes are note times, not upload times; compare content
     return 1 if failures else 0
 
 
